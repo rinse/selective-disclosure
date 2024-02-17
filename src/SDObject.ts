@@ -59,8 +59,8 @@ export class SDObject<T> {
      * @returns Transformed object with disclosures kept as it is.
      */
     map<U>(f: (t: T & SDProps) => U): SDObject<U> {
-        const { _sd_alg, _sd } = this._sdObject;
-        return new SDObject<U>({ ...f(this._sdObject), _sd_alg, _sd }, this._disclosures);
+        const { _sd_alg, _sd } = this.sdObject;
+        return new SDObject<U>({ ...f(this.sdObject), _sd_alg, _sd }, this.disclosures);
     }
 
     /**
@@ -71,15 +71,15 @@ export class SDObject<T> {
      * @returns Transformed object with disclosures kept as it is.
      */
     flatMap<U>(f: (t: T & SDProps) => SDObject<U>): SDObject<U> {
-        const { _sd_alg: pSdAlg, _sd: pSd } = this._sdObject;
-        const newSdObj = f(this._sdObject);
-        const { _sd_alg: nSdAlg, _sd: nSd } = newSdObj._sdObject;
+        const { _sd_alg: pSdAlg, _sd: pSd } = this.sdObject;
+        const newSdObj = f(this.sdObject);
+        const { _sd_alg: nSdAlg, _sd: nSd } = newSdObj.sdObject;
         if ((pSdAlg ?? SDDefaultHashAlg) !== (nSdAlg ?? SDDefaultHashAlg)) {
             throw new Error("Inconsistent hashing algorithms.");
         }
         return new SDObject(
-            { ...newSdObj._sdObject, _sd: [...pSd ?? [], ...nSd ?? []] },
-            [...this._disclosures, ...newSdObj._disclosures]
+            { ...newSdObj.sdObject, _sd: [...pSd ?? [], ...nSd ?? []] },
+            [...this.disclosures, ...newSdObj.disclosures]
         );
     }
 
@@ -163,6 +163,49 @@ export class SDObject<T> {
         // @ts-expect-error Type 'SDObject<T>' is not assignable to type 'SDObject<Omit<T, K> & StructuredSD<T, K, SDProps & U>>'.
         return new SDObject(newPayload, [...disclosures, ...newDisclosures]);
     }
+
+    /**
+     * Add decoy digests and then shuffle {@link _sdObject._sd}.
+     *
+     * TODO: Consider about adding decoys to array properties.
+     *
+     * > 5.2.4.1. Object Properties
+     * >
+     * > The Issuer MUST hide the original order of the claims in the array.
+     * > To ensure this, it is RECOMMENDED to shuffle the array of hashes,
+     * > e.g., by sorting it alphanumerically or randomly, after potentially
+     * > adding decoy digests as described in Section 5.2.5.
+     * > https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-07.html#section-5.2.4.1
+     *
+     * > 12.3. Decoy Digests
+     * > https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-07.html#section-12.3
+     */
+    hideOrderOfSDClaims(decoyCounts: number, options: DisclosureOpions = {}, shuffle: (sdArray: string[]) => string[] = sort): SDObject<T> {
+        return this.addDecoys(decoyCounts, options).shuffleOrderOfSDClaims(shuffle);
+    }
+
+    private addDecoys(count: number, options: DisclosureOpions = {}): SDObject<T> {
+        const { sdObject } = this;
+        const filledSDOptions = fillSDOptions(sdObject, options);
+        const decoys = [...range(0, count)].map(() => {
+            // > It is RECOMMENDED to create the decoy digests
+            // > by hashing over a cryptographically secure random number.
+            const random = filledSDOptions.createSalt();
+            // > The bytes of the digest MUST then be
+            // > base64url-encoded as above. The same digest
+            // > function as for the Disclosures MUST be used.
+            return base64url(hash(random, filledSDOptions.hashAlg));
+        });
+        const sdArray: string[] = [...(this.sdObject._sd ?? []), ...decoys];
+        return new SDObject({ ...this.sdObject, _sd: sdArray }, this.disclosures);
+    }
+
+    private shuffleOrderOfSDClaims(shuffle: (sdArray: string[]) => string[] = sort): SDObject<T> {
+        const { sdObject } = this;
+        const sdArray = sdObject._sd ?? [];
+        const newSdArray = shuffle(sdArray)
+        return new SDObject({ ...this.sdObject, _sd: newSdArray }, this.disclosures);
+    }
 }
 
 // 5.2.1. Disclosures for Object Properties 
@@ -170,6 +213,18 @@ export function disclosureForObjectProps(salt: string, claimName: string, claimV
     const array = [salt, claimName, claimValue];
     const jsonEncodedArray = stringify(array);
     return base64url.encode(jsonEncodedArray);
+}
+
+// Generates [start, end)
+function* range(start: number, end: number) {
+    for (let i = start; i < end; ++i) {
+        yield i;
+    }
+}
+
+// Sort an array
+function sort<T>(array: T[], comp?: ((a: T, b: T) => number) | undefined): T[] {
+    return [...array].sort(comp);
 }
 
 // Make property types specified by K selectively disclosable array.
