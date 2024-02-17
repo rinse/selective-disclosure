@@ -1,0 +1,38 @@
+{
+  "author": "rinse <rinse418@gmail.com>",
+  "name": "@rinse495/selective-disclosure",
+  "description": "Provides selective disclosure for SD-JWT.",
+  "version": "0.1.1",
+  "keywords": [
+    "sd-jwt",
+    "jwt",
+    "jws",
+    "vc"
+  ],
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rinse/selective-disclosure.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "private": false,
+  "main": "out/index.js",
+  "types": "out/index.d.js",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "jest"
+  },
+  "dependencies": {
+    "base64url": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.19",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  }
+}
